@@ -5,14 +5,17 @@
     <title>Proyecto U-Creart Alameda LABCD</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
-    
+
     <style>
+        body{
+            margin:0;
+            overflow:hidden;
+            font-family:Arial, Helvetica, sans-serif;
+        }
+
         #overlay{
             position:fixed;
-            top:0;
-            left:0;
-            width:100%;
-            height:100%;
+            inset:0;
             background:black;
             display:flex;
             justify-content:center;
@@ -21,54 +24,274 @@
         }
 
         #startButton{
-            font-size:1.5rem;
+            font-size:1.4rem;
             padding:20px 40px;
             cursor:pointer;
         }
     </style>
 </head>
-
 <body>
 
 <div id="overlay">
-    <button id="startButton">Entrar a la experiencia</button>
+    <button id="startButton">
+        Entrar a la experiencia
+    </button>
 </div>
 
 <a-scene>
-
     <a-assets>
         <video
             id="video360"
-            src="multimedia/001.mp4"
             preload="auto"
-            loop
             playsinline
             webkit-playsinline
             crossorigin="anonymous">
         </video>
     </a-assets>
+    <a-videosphere id="videosphere" src="#video360"></a-videosphere>
 
-    <a-videosphere src="#video360"></a-videosphere>
+    <!-- BOTÓN CONTINUAR -->
 
+    <a-entity
+    id="btnContinue"
+    geometry="primitive:circle; radius:0.35"
+    material="color:#00BCD4; shader:flat"
+    position="9999 9999 9999">
+        <a-text
+            value="Continuar"
+            align="center"
+            color="white"
+            side="double"
+            position="0 0 0.02">
+        </a-text>
+    </a-entity>
+
+    <!-- CÁMARA -->
+    <a-entity camera look-controls>
+
+        <a-entity
+            id="cursor"
+            position="0 0 -1"
+            geometry="primitive:ring;
+            radiusInner:0.01;
+            radiusOuter:0.015"
+            material="color:white; shader:flat"
+            cursor="fuse:true; fuseTimeout:1200"
+            raycaster="objects:.clickable; far:10">
+            <a-entity
+
+                id="progress"
+                geometry="primitive:ring;
+                radiusInner:0.02;
+                radiusOuter:0.025;
+                thetaLength:0"
+
+                material="color:cyan; shader:flat">
+            </a-entity>
+        </a-entity>
+
+    </a-entity>
 </a-scene>
 
+    
 <script>
+const playlist=[
+    "multimedia/001.mp4",
+    "multimedia/002.mp4"
+];
 
-const video = document.getElementById("video360");
-const overlay = document.getElementById("overlay");
-const button = document.getElementById("startButton");
+let currentVideo=0;
 
-button.addEventListener("click", async () => {
+const video=document.getElementById("video360");
+const overlay=document.getElementById("overlay");
+const startButton=document.getElementById("startButton");
+
+const btnContinue=document.getElementById("btnContinue");
+const camera=document.querySelector("[camera]");
+
+
+function hideContinue(){
+
+    btnContinue.object3D.position.set(
+        9999,
+        9999,
+        9999
+    );
+
+    btnContinue.classList.remove("clickable");
+
+}
+
+function showContinue(){
+
+    const cameraPosition = new THREE.Vector3();
+    camera.object3D.getWorldPosition(cameraPosition);
+
+    // Obtener solo la rotación Y
+    const rotationY = THREE.MathUtils.degToRad(
+        camera.object3D.rotation.y * 180 / Math.PI
+    );
+
+    // Offset horizontal
+    const distance = 2;
+
+    const offset = new THREE.Vector3(
+        -Math.sin(rotationY) * distance,
+        0,
+        -Math.cos(rotationY) * distance
+    );
+
+    btnContinue.object3D.position.copy(cameraPosition).add(offset);
+
+    // Mantener la misma altura
+    btnContinue.object3D.position.y = cameraPosition.y;
+
+    btnContinue.object3D.lookAt(cameraPosition);
+
+    // Posicionar el botón
+    btnContinue.object3D.position.copy(cameraPosition).add(offset);
+
+    // Que el botón mire hacia la cámara
+    btnContinue.object3D.lookAt(cameraPosition);
+
+    // Activar interacción
+    btnContinue.classList.add("clickable");
+
+}
+
+function resetExperience(){
+
+    hideContinue();
+
+    currentVideo = 0;
+
+    video.pause();
+    video.currentTime = 0;
+
+    overlay.style.display = "flex";
+
+}
+
+async function loadVideo(index){
+
+    currentVideo=index;
+
+    hideContinue();
+
+    video.pause();
+
+    video.src=playlist[index];
+
+    video.load();
 
     try{
+
         await video.play();
-        overlay.style.display = "none";
+
     }
+
     catch(err){
-        console.error(err);
+
+        console.log(err);
+
+    }
+
+}
+
+startButton.addEventListener("click",async()=>{
+
+    overlay.style.display="none";
+
+    await loadVideo(0);
+
+});
+
+video.addEventListener("ended",()=>{
+
+    // Continue Playlist
+    if(currentVideo < playlist.length - 1){
+
+        showContinue();
+
+    }else{
+
+        // Last video ended = Reset
+        resetExperience();
     }
 
 });
+
+btnContinue.addEventListener("click",()=>{
+    hideContinue();
+    if(currentVideo < playlist.length-1){
+        loadVideo(currentVideo+1);
+    }
+    else{
+
+        // Reset experience
+        currentVideo = 0;
+
+        video.pause();
+        video.currentTime = 0;
+        video.removeAttribute("src");
+        video.load();
+
+        overlay.style.display = "flex";
+
+    }
+
+});
+
+
+
+
+
+//======================================================
+// PROGRESO DEL FUSE
+//======================================================
+
+const cursor=document.querySelector("#cursor");
+const progress=document.querySelector("#progress");
+
+let hovering=false;
+let startTime=null;
+const fuseTimeout=1200;
+
+cursor.addEventListener("mouseenter",()=>{
+
+    hovering=true;
+    startTime=Date.now();
+    cursor.setAttribute("material","color","cyan");
+    
+    animateProgress();
+
+});
+
+cursor.addEventListener("mouseleave",()=>{
+
+    hovering=false;
+    progress.setAttribute("geometry","thetaLength",0);
+    cursor.setAttribute("material","color","white");
+
+});
+
+function animateProgress(){
+
+    if(!hovering) return;
+    const elapsed=Date.now()-startTime;
+    const percent=Math.min(elapsed/fuseTimeout,1);
+
+    progress.setAttribute(
+        "geometry",
+        "thetaLength",
+        percent*360
+    );
+
+    if(percent<1){
+        requestAnimationFrame(animateProgress);
+    }
+
+}
 
 </script>
 
